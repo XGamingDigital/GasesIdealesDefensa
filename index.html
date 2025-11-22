@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Gases Nobles</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Import Three.js from CDN (ES Modules) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+        <header class="glass-panel">
+            <h1>SIMULADOR DE GASES NOBLES</h1>
+            <div class="status-indicator">
+                <span id="connection-status">EN LÍNEA</span>
+                <div class="pulse"></div>
+            </div>
+        </header>
+
+        <main class="controls-container" id="ui-container">
+            <!-- Mode Selection -->
+            <section class="glass-panel mode-panel">
+                <h2>MODO DE OPERACIÓN</h2>
+                <div class="button-group">
+                    <button class="mode-btn active" data-mode="IDLE" title="Modo libre: Controla todos los parámetros">LIBRE</button>
+                    <button class="mode-btn" data-mode="BOYLE" title="Presión varía, Temperatura constante">LEY DE BOYLE</button>
+                    <button class="mode-btn" data-mode="CHARLES" title="Temperatura varía, Presión constante">LEY DE CHARLES</button>
+                    <button class="mode-btn" data-mode="GAY-LUSSAC" title="Volumen constante, Presión varía con Temperatura">GAY-LUSSAC</button>
+                    <button class="mode-btn danger" data-mode="MISSION" title="Simula el ascenso del globo en la atmósfera">MISIÓN ATMOSFÉRICA</button>
+                </div>
+            </section>
+
+            <!-- Physical Properties -->
+            <section class="glass-panel control-panel">
+                <h2>PROPIEDADES FÍSICAS</h2>
+                
+                <div class="control-group">
+                    <label for="gas-select">TIPO DE GAS</label>
+                    <select id="gas-select" title="Selecciona el tipo de gas noble">
+                        <option value="HE">Helio (He) - Más ligero</option>
+                        <option value="NE">Neón (Ne) - Intermedio</option>
+                        <option value="AR">Argón (Ar) - Más pesado</option>
+                    </select>
+                </div>
+
+                <!-- INITIAL RADIUS CONTROL -->
+                <div class="control-group">
+                    <label>RADIO INICIAL (m) <span class="hint">- Tamaño al inicio</span></label>
+                    <input type="range" id="slider-initial-radius" min="0.5" max="5.0" step="0.1" value="1.0" title="Radio inicial del globo">
+                    <input type="number" id="input-initial-radius" class="value-input" min="0.5" max="5.0" step="0.1" value="1.0" title="Escribe un valor manual">
+                </div>
+
+                <!-- PAYLOAD MASS CONTROL -->
+                <div class="control-group">
+                    <label>MASA CARGA (kg) <span class="hint">- Peso del equipamiento</span></label>
+                    <input type="range" id="slider-payload-mass" min="0.1" max="5.0" step="0.1" value="1.0" title="Masa de la carga útil">
+                    <input type="number" id="input-payload-mass" class="value-input" min="0.1" max="5.0" step="0.1" value="1.0" title="Escribe un valor manual">
+                </div>
+            </section>
+
+            <!-- Controls -->
+            <section class="glass-panel control-panel">
+                <h2>PARÁMETROS DE CONTROL</h2>
+
+                <!-- PRESSURE CONTROL -->
+                <div class="control-group" id="ctrl-pressure">
+                    <label>PRESIÓN EXTERNA (Pa) <span class="hint">- Desliza para cambiar</span></label>
+                    <input type="range" id="slider-pressure" min="10000" max="200000" step="1000" value="101325" title="Presión atmosférica externa">
+                    <input type="number" id="input-pressure" class="value-input" min="10000" max="200000" step="1000" value="101325" title="Escribe un valor manual">
+                </div>
+                
+                <!-- PRESSURE FIXED DISPLAY (for Charles/Gay-Lussac) -->
+                <div class="control-group hidden" id="ctrl-pressure-fixed">
+                    <label>PRESIÓN (Constante)</label>
+                    <div class="fixed-value" id="val-pressure-fixed">101325 Pa</div>
+                </div>
+
+                <!-- TEMPERATURE CONTROL -->
+                <div class="control-group" id="ctrl-temperature">
+                    <label>TEMPERATURA (K) <span class="hint">- Desliza para cambiar</span></label>
+                    <input type="range" id="slider-temperature" min="100" max="500" step="1" value="293" title="Temperatura del entorno">
+                    <input type="number" id="input-temperature" class="value-input" min="100" max="500" step="1" value="293" title="Escribe un valor manual">
+                </div>
+                
+                <!-- TEMPERATURE FIXED DISPLAY (for Boyle) -->
+                <div class="control-group hidden" id="ctrl-temperature-fixed">
+                    <label>TEMPERATURA (Constante)</label>
+                    <div class="fixed-value" id="val-temperature-fixed">293 K</div>
+                </div>
+                
+                <!-- VOLUME FIXED DISPLAY (for Gay-Lussac) -->
+                <div class="control-group hidden" id="ctrl-volume-fixed">
+                    <label>VOLUMEN (Constante)</label>
+                    <div class="fixed-value" id="val-volume-fixed">0.00 m³</div>
+                </div>
+
+                <!-- EDUCATIONAL MODE CONTROLS (Boyle/Charles/Gay-Lussac) -->
+                <div class="control-group hidden" id="educational-controls">
+                    <label>DIRECCIÓN DE CAMBIO</label>
+                    <div class="direction-buttons">
+                        <button id="btn-increase" class="dir-btn">↑ AUMENTAR</button>
+                        <button id="btn-decrease" class="dir-btn">↓ DISMINUIR</button>
+                    </div>
+                    <button id="btn-start-edu" class="action-btn">▶ INICIAR SIMULACIÓN</button>
+                    <button id="btn-stop-edu" class="action-btn secondary">■ DETENER</button>
+                </div>
+
+                <!-- MISSION MODE CONTROLS -->
+                <div class="control-group hidden" id="mission-controls">
+                    <button id="btn-launch" class="action-btn" title="Inicia la simulación de ascenso">🚀 INICIAR ASCENSO</button>
+                    <button id="btn-reset" class="action-btn secondary" title="Reinicia la simulación">↻ REINICIAR</button>
+                </div>
+                
+                <!-- BURST TENSION CONTROL (Always visible) -->
+                <div class="control-group">
+                    <label>TENSIÓN MÁXIMA - Radio Explosión (m) <span class="hint">- Límite antes de explotar</span></label>
+                    <input type="range" id="slider-max-radius" min="2" max="10" step="0.5" value="5" title="Radio máximo antes de que explote el globo">
+                    <input type="number" id="input-max-radius" class="value-input" min="2" max="10" step="0.5" value="5" title="Escribe un valor manual">
+                </div>
+            </section>
+
+            <!-- Formula Display -->
+            <section class="panel">
+                <h2>⚗️ FÓRMULA APLICADA</h2>
+                <div class="formula-display" id="formula-display">
+                    <span class="formula-text">PV = nRT</span>
+                </div>
+            </section>
+
+            <!-- Data Display -->
+            <section class="glass-panel data-panel">
+                <h2>TELEMETRÍA EN TIEMPO REAL</h2>
+                <div class="data-grid">
+                    <div class="data-item">
+                        <span class="label">ALTITUD</span>
+                        <span class="value" id="disp-altitude">0 m</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="label">VOLUMEN</span>
+                        <span class="value" id="disp-volume">0.00 m³</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="label">RADIO</span>
+                        <span class="value" id="disp-radius">0.00 m</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="label">VELOCIDAD</span>
+                        <span class="value" id="disp-velocity">0.0 m/s</span>
+                    </div>
+                </div>
+                
+                <div class="danger-meter">
+                    <label>INTEGRIDAD ESTRUCTURAL (Tensión)</label>
+                    <div class="progress-bar-bg">
+                        <div id="danger-bar" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
